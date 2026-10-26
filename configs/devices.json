@@ -1,0 +1,29 @@
+{
+  "control_addr": ":8080",
+  "devices": [
+    {
+      "id": "device-1",
+      "name": "Mock Device 1",
+      "listen_addr": ":9000",
+      "delay_ms": 0,
+      "responses": {
+        "ping": "pong",
+        "status": { "ok": true }
+      },
+      "behaviors": {
+        "get_counter": { "type": "state_get", "state_key": "counter" },
+        "inc_counter": { "type": "state_set", "state_key": "counter" },
+        "boom": { "type": "fault", "fault": "malformed" }
+      }
+    },
+    {
+      "id": "device-2",
+      "name": "Mock Device 2",
+      "listen_addr": ":9001",
+      "delay_ms": 50,
+      "responses": {
+        "ping": "pong2"
+      }
+    }
+  ]
+}

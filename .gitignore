@@ -1,0 +1,9 @@
+bin/
+*.exe
+*.test
+*.out
+go.sum.bak
+.DS_Store
+.idea/
+.vscode/
+*.swp
