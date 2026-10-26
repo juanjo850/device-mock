@@ -69,7 +69,18 @@ printf '{"id":"1","method":"ping"}\n' | nc localhost 9000
 
 ---
 
-## Protocol
+## Protocols
+
+Each device declares a `protocol` (default `json`):
+
+| Protocol | Description |
+|----------|-------------|
+| `json`   | Newline-delimited JSON request/response (default). |
+| `scpi`   | SCPI-style text commands (case-insensitive), text responses. |
+| `raw`    | Line-delimited text, exact-match responses. |
+| `telnet` | Telnet with IAC negotiation, then text commands. |
+
+### JSON (default)
 
 Transport is **TCP**. Each message is one JSON object terminated by a newline
 (`\n`). Requests and responses are matched by the optional `id` field.
@@ -168,6 +179,43 @@ Each behavior may also set `delay_ms` to stall before responding.
 | `timeout`   | Stall for 30s then drop (simulates a hung device).             |
 | `malformed` | Write `{not valid json}` and close.                            |
 | `reset`     | Close the connection abruptly.                                  |
+
+### SCPI example
+
+```sh
+printf '*IDN?\n' | nc localhost 9100
+# ACME,MODEL1,12345,1.0
+printf 'MEAS:VOLT?\n' | nc localhost 9100
+# 3.14
+```
+
+Config:
+
+```json
+{
+  "id": "scpi-dev",
+  "protocol": "scpi",
+  "listen_addr": ":9100",
+  "responses": {
+    "*IDN?": "ACME,MODEL1,12345,1.0",
+    "MEAS:VOLT?": 3.14
+  }
+}
+```
+
+### Raw example
+
+```sh
+printf 'PING\n' | nc localhost 9101
+# PONG
+```
+
+### Telnet example
+
+```sh
+telnet localhost 9102
+# then type: HELLO  ->  HI
+```
 
 ### Stateful example
 

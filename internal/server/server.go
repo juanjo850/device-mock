@@ -1,19 +1,17 @@
 package server
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"log/slog"
 	"net"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/juanjo850/device-mock/internal/config"
 	"github.com/juanjo850/device-mock/internal/device"
-	"github.com/juanjo850/device-mock/internal/protocol"
+	"github.com/juanjo850/device-mock/internal/protocols"
 )
 
 // Session describes an active client connection.
@@ -192,7 +190,6 @@ func (s *Server) RequestsTotal() int64 { return s.reqTotal.Load() }
 
 // handleConn serves a single client connection for a device.
 func (s *Server) handleConn(ctx context.Context, d *device.Device, conn net.Conn) {
-	defer conn.Close()
 	sid := fmt.Sprintf("s-%d", s.nextID.Add(1))
 	sess := &Session{ID: sid, DeviceID: d.ID, RemoteAddr: conn.RemoteAddr().String(), ConnectedAt: time.Now()}
 	s.sessionsMu.Lock()
@@ -204,61 +201,11 @@ func (s *Server) handleConn(ctx context.Context, d *device.Device, conn net.Conn
 		s.sessionsMu.Unlock()
 	}()
 	s.connTotal.Add(1)
-	slog.Info("client connected", "device", d.ID, "session", sid, "remote", conn.RemoteAddr().String())
+	slog.Info("client connected", "device", d.ID, "protocol", d.Protocol, "session", sid, "remote", conn.RemoteAddr().String())
 	defer slog.Info("client disconnected", "device", d.ID, "session", sid, "remote", conn.RemoteAddr().String())
 
-	scanner := bufio.NewScanner(conn)
-	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
-	for {
-		_ = conn.SetReadDeadline(time.Now().Add(idleTimeout))
-		if !scanner.Scan() {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		s.reqTotal.Add(1)
-		req, err := protocol.DecodeRequest([]byte(line))
-		if err != nil {
-			resp := protocol.Response{Error: &protocol.ErrorObj{Code: 400, Message: err.Error()}}
-			_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-			writeResp(conn, resp)
-			continue
-		}
-		outcome := d.Handle(req)
-		if outcome.Drop {
-			return
-		}
-		if outcome.Malformed {
-			_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-			_, _ = conn.Write([]byte("{not valid json}\n"))
-			return
-		}
-		_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-		writeResp(conn, outcome.Resp)
-	}
-	if err := scanner.Err(); err != nil {
-		if ne, ok := err.(net.Error); ok && ne.Timeout() {
-			slog.Debug("idle timeout", "device", d.ID, "remote", conn.RemoteAddr().String())
-		} else {
-			slog.Debug("read error", "device", d.ID, "err", err)
-		}
-	}
-}
-
-func writeResp(conn net.Conn, resp protocol.Response) {
-	b, err := protocol.Encode(resp)
-	if err != nil {
-		return
-	}
-	b = append(b, '\n')
-	_, _ = conn.Write(b)
+	h := protocols.For(d.Protocol)
+	h.Serve(ctx, conn, d, func() { s.reqTotal.Add(1) })
 }
 
 // AddDevice registers and starts a device at runtime.

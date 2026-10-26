@@ -2,6 +2,7 @@ package device
 
 import (
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +21,7 @@ type Outcome struct {
 type Device struct {
 	ID         string
 	Name       string
+	Protocol   string // json, scpi, telnet, raw
 	ListenAddr string
 	DelayMs    int
 	Responses  map[string]any
@@ -31,13 +33,38 @@ type Device struct {
 
 // FromConfig builds a Device from config.
 func FromConfig(c config.DeviceConfig) *Device {
+	proto := c.Protocol
+	if proto == "" {
+		proto = "json"
+	}
+	proto = strings.ToLower(strings.TrimSpace(proto))
+	responses := c.Responses
+	behaviors := c.Behaviors
+	// SCPI commands are case-insensitive: normalize keys to uppercase.
+	if proto == "scpi" {
+		if responses != nil {
+			nr := map[string]any{}
+			for k, v := range responses {
+				nr[strings.ToUpper(strings.TrimSpace(k))] = v
+			}
+			responses = nr
+		}
+		if behaviors != nil {
+			nb := map[string]config.Behavior{}
+			for k, v := range behaviors {
+				nb[strings.ToUpper(strings.TrimSpace(k))] = v
+			}
+			behaviors = nb
+		}
+	}
 	return &Device{
 		ID:         c.ID,
 		Name:       c.Name,
+		Protocol:   proto,
 		ListenAddr: c.ListenAddr,
 		DelayMs:    c.DelayMs,
-		Responses:  c.Responses,
-		Behaviors:  c.Behaviors,
+		Responses:  responses,
+		Behaviors:  behaviors,
 		State:      map[string]any{},
 	}
 }

@@ -106,6 +106,7 @@ func (a *API) listDevices(w http.ResponseWriter, r *http.Request) {
 		out = append(out, map[string]any{
 			"id":          d.ID,
 			"name":        d.Name,
+			"protocol":    d.Protocol,
 			"listen_addr": d.ListenAddr,
 			"delay_ms":    d.DelayMs,
 		})
@@ -123,6 +124,7 @@ func (a *API) getDevice(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id":          d.ID,
 		"name":        d.Name,
+		"protocol":    d.Protocol,
 		"listen_addr": d.ListenAddr,
 		"delay_ms":    d.DelayMs,
 		"responses":   d.Responses,
@@ -155,6 +157,7 @@ func (a *API) resetState(w http.ResponseWriter, r *http.Request) {
 type createReq struct {
 	ID         string                     `json:"id"`
 	Name       string                     `json:"name"`
+	Protocol   string                     `json:"protocol"`
 	ListenAddr string                     `json:"listen_addr"`
 	DelayMs    int                        `json:"delay_ms"`
 	Responses  map[string]any             `json:"responses"`
@@ -171,15 +174,15 @@ func (a *API) createDevice(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "id and listen_addr required"})
 		return
 	}
-	d := &device.Device{
+	d := device.FromConfig(config.DeviceConfig{
 		ID:         cr.ID,
 		Name:       cr.Name,
+		Protocol:   cr.Protocol,
 		ListenAddr: cr.ListenAddr,
 		DelayMs:    cr.DelayMs,
 		Responses:  cr.Responses,
 		Behaviors:  cr.Behaviors,
-		State:      map[string]any{},
-	}
+	})
 	if err := a.server.AddDevice(r.Context(), d); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return

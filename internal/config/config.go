@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Behavior describes how a device handles a method.
@@ -21,6 +22,7 @@ type DeviceConfig struct {
 	ID         string              `json:"id"`
 	Name       string              `json:"name"`
 	ListenAddr string              `json:"listen_addr"`
+	Protocol   string              `json:"protocol,omitempty"` // json, scpi, telnet, raw
 	DelayMs    int                 `json:"delay_ms"`
 	Responses  map[string]any      `json:"responses,omitempty"`
 	Behaviors  map[string]Behavior `json:"behaviors,omitempty"`
@@ -57,6 +59,7 @@ func Default() Config {
 			{
 				ID:         "device-1",
 				Name:       "Mock Device 1",
+				Protocol:   "json",
 				ListenAddr: ":9000",
 				Responses: map[string]any{
 					"ping":   "pong",
@@ -89,6 +92,10 @@ func (c Config) Validate() error {
 			return fmt.Errorf("duplicate listen_addr: %s", d.ListenAddr)
 		}
 		addrs[d.ListenAddr] = true
+		proto := normalizeProtocol(d.Protocol)
+		if proto != "json" && proto != "scpi" && proto != "telnet" && proto != "raw" {
+			return fmt.Errorf("device %s: unknown protocol: %s", d.ID, d.Protocol)
+		}
 		for method, beh := range d.Behaviors {
 			if err := beh.Validate(); err != nil {
 				return fmt.Errorf("device %s method %s: %w", d.ID, method, err)
@@ -112,4 +119,12 @@ func (b Behavior) Validate() error {
 		return fmt.Errorf("unknown behavior type: %s", b.Type)
 	}
 	return nil
+}
+
+func normalizeProtocol(p string) string {
+	p = strings.ToLower(strings.TrimSpace(p))
+	if p == "" {
+		return "json"
+	}
+	return p
 }
