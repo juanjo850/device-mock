@@ -187,6 +187,11 @@ func (TelnetHandler) Serve(ctx context.Context, conn net.Conn, d *device.Device,
 			return
 		}
 
+		// Ignore NUL bytes (telnet sends \r\0 for a bare CR).
+		if b == 0 {
+			continue
+		}
+
 		if b == iac {
 			// parse IAC sequence
 			verb, err := reader.ReadByte()
@@ -237,11 +242,13 @@ func (TelnetHandler) Serve(ctx context.Context, conn net.Conn, d *device.Device,
 		if b == '\n' || b == '\r' {
 			cmd := string(textBuf)
 			textBuf = textBuf[:0]
-			// consume paired \r\n
-			// (best-effort: peek)
+			// Consume paired \r\n or \r\0 (telnet bare CR).
 			if b == '\r' {
-				// try read \n if available without blocking: use buffered
-				// We'll just handle next byte next iteration; if it's \n skip via check
+				if nb, err := reader.ReadByte(); err == nil {
+					if nb != '\n' && nb != 0 {
+						_ = reader.UnreadByte()
+					}
+				}
 			}
 			if strings.TrimSpace(cmd) == "" {
 				continue
@@ -264,6 +271,7 @@ func handleTextCommand(conn net.Conn, d *device.Device, cmd, terminator string, 
 	if cmd == "" {
 		return true
 	}
+	slog.Debug("text command", "device", d.ID, "protocol", d.Protocol, "cmd", fmt.Sprintf("%q", cmd))
 	onRequest()
 
 	method := cmd
