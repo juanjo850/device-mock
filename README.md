@@ -323,6 +323,60 @@ removed from the config are stopped and removed. Changing a device's
 
 ---
 
+## Binding to a specific IP and port
+
+`listen_addr` accepts a full `host:port`, so a device can bind to a specific IP:
+
+```json
+{ "id": "telnet-dev", "protocol": "telnet", "listen_addr": "192.168.52.150:23",
+  "responses": { "HELLO": "HI" } }
+```
+
+Port 23 is privileged (< 1024), so the process needs elevated privileges or a
+port-forwarding workaround. No service changes are required — only config + host
+setup.
+
+**Prerequisite:** the IP must belong to a local interface.
+```sh
+ip addr show | grep 192.168.52.150
+```
+
+**Option 1 — Run with privileges (simplest)**
+```sh
+sudo ./bin/device-mock -config configs/devices.json
+# or grant the capability to the binary (Linux):
+sudo setcap cap_net_bind_service=+ep ./bin/device-mock
+./bin/device-mock -config configs/devices.json
+```
+
+**Option 2 — Port forwarding (app stays on a high port)**
+Keep the app on e.g. `:9023` and forward 23 → 9023:
+```sh
+# iptables/nftables
+sudo iptables -t nat -A PREROUTING -p tcp --dport 23 -j REDIRECT --to-port 9023
+# or socat
+sudo socat TCP-LISTEN:23,fork TCP:192.168.52.150:9023
+```
+
+**Option 3 — Docker port mapping**
+```sh
+docker run -p 192.168.52.150:23:9003 device-mock:latest
+```
+
+**Option 4 — authbind (Debian/Ubuntu)**
+```sh
+authbind --deep ./bin/device-mock -config configs/devices.json
+```
+with `/etc/authbind/byport/23` configured for your user.
+
+Tips:
+- Check for an existing listener on port 23 first: `ss -ltnp | grep :23`.
+- Binding to `192.168.52.150:23` makes the device reachable at that address by
+  external telnet clients (`telnet 192.168.52.150 23`).
+- Binding to an IP not owned by the host fails with "cannot assign requested address".
+- Binding to ports < 1024 requires elevated privileges (root/CAP_NET_BIND_SERVICE).
+- Each device's `listen_addr` must be unique (validated on config load).
+
 ## Examples
 
 ### Python client
