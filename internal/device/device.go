@@ -40,8 +40,8 @@ func FromConfig(c config.DeviceConfig) *Device {
 	proto = strings.ToLower(strings.TrimSpace(proto))
 	responses := c.Responses
 	behaviors := c.Behaviors
-	// SCPI commands are case-insensitive: normalize keys to uppercase.
-	if proto == "scpi" {
+	// SCPI and telnet commands are case-insensitive: normalize keys to uppercase.
+	if proto == "scpi" || proto == "telnet" {
 		if responses != nil {
 			nr := map[string]any{}
 			for k, v := range responses {

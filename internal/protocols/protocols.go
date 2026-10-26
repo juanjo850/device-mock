@@ -267,7 +267,7 @@ func handleTextCommand(conn net.Conn, d *device.Device, cmd, terminator string, 
 	onRequest()
 
 	method := cmd
-	if d.Protocol == "scpi" {
+	if d.Protocol == "scpi" || d.Protocol == "telnet" {
 		method = strings.ToUpper(method)
 	}
 
