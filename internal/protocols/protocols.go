@@ -164,13 +164,14 @@ const (
 
 func (TelnetHandler) Serve(ctx context.Context, conn net.Conn, d *device.Device, onRequest func()) {
 	defer conn.Close()
-	// Announce capabilities.
+	// Announce capabilities: server will echo (remote echo) and suppress go-ahead.
 	conn.Write([]byte{iac, will, optEcho})
 	conn.Write([]byte{iac, will, optSGA})
 
 	reader := bufio.NewReader(conn)
 	var buf []byte
 	textBuf := make([]byte, 0, 256)
+	lastCR := false
 
 	for {
 		select {
@@ -222,12 +223,14 @@ func (TelnetHandler) Serve(ctx context.Context, conn net.Conn, d *device.Device,
 				if err != nil {
 					return
 				}
-				// respond: agree to echo/sga, refuse others
+				// respond: agree to echo and SGA, refuse everything else.
 				switch {
-				case verb == do && (opt == optEcho || opt == optSGA):
-					conn.Write([]byte{iac, will, opt})
-				case verb == will && (opt == optEcho || opt == optSGA):
-					conn.Write([]byte{iac, do, opt})
+				case (opt == optEcho || opt == optSGA) && (verb == do || verb == will):
+					if verb == do {
+						conn.Write([]byte{iac, will, opt})
+					} else {
+						conn.Write([]byte{iac, do, opt})
+					}
 				case verb == do:
 					conn.Write([]byte{iac, wont, opt})
 				case verb == will:
@@ -239,6 +242,12 @@ func (TelnetHandler) Serve(ctx context.Context, conn net.Conn, d *device.Device,
 			continue
 		}
 
+		if b == '\n' && lastCR {
+			lastCR = false
+			continue
+		}
+		lastCR = false
+
 		if b == '\n' || b == '\r' {
 			cmd := string(textBuf)
 			textBuf = textBuf[:0]
@@ -249,6 +258,11 @@ func (TelnetHandler) Serve(ctx context.Context, conn net.Conn, d *device.Device,
 						_ = reader.UnreadByte()
 					}
 				}
+				// Remote echo: move to next line.
+				_, _ = conn.Write([]byte("\r\n"))
+				lastCR = true
+			} else {
+				_, _ = conn.Write([]byte("\n"))
 			}
 			if strings.TrimSpace(cmd) == "" {
 				continue
@@ -259,6 +273,8 @@ func (TelnetHandler) Serve(ctx context.Context, conn net.Conn, d *device.Device,
 			continue
 		}
 
+		// Remote echo of typed character.
+		_, _ = conn.Write([]byte{b})
 		textBuf = append(textBuf, b)
 		_ = buf
 	}
